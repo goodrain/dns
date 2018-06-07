@@ -202,7 +202,7 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 
 	customname := q.Name
 	if strings.HasSuffix(customname, ".") {
-		customname = customname[:len(customname)-2]
+		customname = customname[:len(customname)-1]
 	}
 	if ip, ok := s.recoders[customname]; ok {
 		logf("name is custom domian,return custom ip")
