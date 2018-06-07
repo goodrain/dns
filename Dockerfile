@@ -16,6 +16,6 @@ FROM alpine
 
 LABEL Creater="barnett@Goodrain" 
 
-ADD bin/amd64/ /run
+ADD bin/amd64/kube-dns /run/kube-dns
 
 ENTRYPOINT ["/run/kube-dns"]
