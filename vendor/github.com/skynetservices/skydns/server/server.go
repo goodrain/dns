@@ -204,10 +204,14 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 	if strings.HasSuffix(customname, ".") {
 		customname = customname[:len(customname)-1]
 	}
-	if ip, ok := s.recoders[customname]; ok {
+	if ip, ok := s.recoders[customname]; ok && (q.Qtype == dns.TypeA || q.Qtype == dns.TypeAAAA) {
 		logf("name is custom domian,return custom ip")
 		serv := msg.Service{Host: ip}
-		m.Answer = append(m.Answer, serv.NewCNAME(name, dns.Fqdn(ip)))
+		if q.Qtype == dns.TypeA {
+			m.Answer = append(m.Answer, serv.NewA(q.Name, net.ParseIP(ip)))
+		} else if q.Qtype == dns.TypeAAAA {
+			m.Answer = append(m.Answer, serv.NewAAAA(q.Name, net.ParseIP(ip)))
+		}
 		m = s.dedup(m)
 		if dnssec {
 			if s.config.PubKey != nil {
