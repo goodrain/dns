@@ -19,6 +19,7 @@ package dns
 import (
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -119,9 +120,11 @@ type KubeDNS struct {
 
 	// Initial timeout for endpoints and services to be synced from APIServer
 	initialSyncTimeout time.Duration
+	//custom domain recoders
+	recoders map[string]string
 }
 
-func NewKubeDNS(client clientset.Interface, clusterDomain string, timeout time.Duration, configSync config.Sync) *KubeDNS {
+func NewKubeDNS(client clientset.Interface, clusterDomain string, timeout time.Duration, configSync config.Sync, recoders map[string]string) *KubeDNS {
 	kd := &KubeDNS{
 		kubeClient:          client,
 		domain:              clusterDomain,
@@ -135,6 +138,7 @@ func NewKubeDNS(client clientset.Interface, clusterDomain string, timeout time.D
 
 		configLock: sync.RWMutex{},
 		configSync: configSync,
+		recoders:   recoders,
 	}
 
 	kd.setEndpointsStore()
@@ -636,6 +640,11 @@ func (kd *KubeDNS) HasSynced() bool {
 func (kd *KubeDNS) Records(name string, exact bool) (retval []skymsg.Service, err error) {
 	glog.V(3).Infof("Query for %q, exact: %v", name, exact)
 
+	//custom code by goodrain
+	if host, ok := kd.recoders[name]; ok {
+		return []skymsg.Service{skymsg.Service{Host: host}}, nil
+	}
+	//custom code end
 	trimmed := strings.TrimRight(name, ".")
 	segments := strings.Split(trimmed, ".")
 	isFederationQuery := false
@@ -666,9 +675,23 @@ func (kd *KubeDNS) Records(name string, exact bool) (retval []skymsg.Service, er
 		glog.V(4).Infof("Records for %v: %v", name, records)
 		return records, nil
 	}
+	//custom code by goodrain
+	// Level 1 domain name in the container, which is resolved by default to 127.0.0.1
+	if isToplevelDomainInContainer(name) {
+		glog.V(3).Infof("No record found but name is toplevel doamin, default return 127.0.0.1 %v", name)
+		return []skymsg.Service{skymsg.Service{Host: "127.0.0.1"}}, nil
+	}
+	//custom code end
 
 	glog.V(3).Infof("No record found for %v", name)
 	return nil, etcd.Error{Code: etcd.ErrorCodeKeyNotFound}
+}
+
+func isToplevelDomainInContainer(name string) bool {
+	if ok, _ := regexp.MatchString("^[_a-z0-9-]+\\.[_a-z0-9-]{8,}?\\.svc\\.cluster\\.local\\.$", name); ok {
+		return ok
+	}
+	return false
 }
 
 func (kd *KubeDNS) recordsForFederation(records []skymsg.Service, path []string, exact bool, federationSegments []string) (retval []skymsg.Service, err error) {

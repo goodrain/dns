@@ -228,6 +228,9 @@ container-clean:
 bin-clean:
 	rm -rf .go bin
 
+build-image-dns: build
+	docker build -t rainbond/rbd-dns:3.6 .
+
 .PHONY: help
 help:
 	@echo "make targets"
