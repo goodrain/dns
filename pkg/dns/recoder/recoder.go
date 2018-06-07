@@ -45,7 +45,9 @@ func ParseRecodersFlag(str string, recoders map[string]string) error {
 		domain := strings.TrimSpace(splits[0])
 		ip := strings.TrimSpace(splits[1])
 		if err := ValidateDomain(domain); err != nil {
-			return err
+			if !strings.HasPrefix(domain, "*.") {
+				return err
+			}
 		}
 		if err := ValidateIP(ip); err != nil {
 			return err

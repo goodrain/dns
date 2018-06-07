@@ -28,26 +28,36 @@ type server struct {
 	backend Backend
 	config  *Config
 
-	group        *sync.WaitGroup
-	dnsUDPclient *dns.Client // used for forwarding queries
-	dnsTCPclient *dns.Client // used for forwarding queries
-	scache       *cache.Cache
-	rcache       *cache.Cache
-	recoders     map[string]string
+	group           *sync.WaitGroup
+	dnsUDPclient    *dns.Client // used for forwarding queries
+	dnsTCPclient    *dns.Client // used for forwarding queries
+	scache          *cache.Cache
+	rcache          *cache.Cache
+	recoders        map[string]string
+	genericRecoders map[string]string
 }
 
 // New returns a new SkyDNS server.
 func New(backend Backend, config *Config) *server {
-	return &server{
-		backend:      backend,
-		config:       config,
-		recoders:     config.Recoders,
-		group:        new(sync.WaitGroup),
-		scache:       cache.New(config.SCache, 0),
-		rcache:       cache.New(config.RCache, config.RCacheTtl),
-		dnsUDPclient: &dns.Client{Net: "udp", ReadTimeout: config.ReadTimeout, WriteTimeout: config.ReadTimeout, SingleInflight: true},
-		dnsTCPclient: &dns.Client{Net: "tcp", ReadTimeout: config.ReadTimeout, WriteTimeout: config.ReadTimeout, SingleInflight: true},
+	ser := &server{
+		backend:         backend,
+		config:          config,
+		recoders:        make(map[string]string),
+		genericRecoders: make(map[string]string),
+		group:           new(sync.WaitGroup),
+		scache:          cache.New(config.SCache, 0),
+		rcache:          cache.New(config.RCache, config.RCacheTtl),
+		dnsUDPclient:    &dns.Client{Net: "udp", ReadTimeout: config.ReadTimeout, WriteTimeout: config.ReadTimeout, SingleInflight: true},
+		dnsTCPclient:    &dns.Client{Net: "tcp", ReadTimeout: config.ReadTimeout, WriteTimeout: config.ReadTimeout, SingleInflight: true},
 	}
+	for k, v := range config.Recoders {
+		if strings.HasPrefix(k, "*.") && len(k) > 2 {
+			ser.genericRecoders[k[2:]] = v
+		} else {
+			ser.recoders[k] = v
+		}
+	}
+	return ser
 }
 
 // Run is a blocking operation that starts the server listening on the DNS ports.
@@ -127,6 +137,20 @@ func (s *server) Stop() {
 	// TODO(miek)
 	//s.group.Add(-2)
 }
+func (s *server) getrecoder(name string) string {
+	if strings.HasSuffix(name, ".") {
+		name = name[:len(name)-1]
+	}
+	if ip, ok := s.recoders[name]; ok {
+		return ip
+	}
+	for k, v := range s.genericRecoders {
+		if strings.HasSuffix(name, k) {
+			return v
+		}
+	}
+	return ""
+}
 
 // ServeDNS is the handler for DNS requests, responsible for parsing DNS request, possibly forwarding
 // it to a real dns server and returning a response.
@@ -200,11 +224,7 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 
-	customname := q.Name
-	if strings.HasSuffix(customname, ".") {
-		customname = customname[:len(customname)-1]
-	}
-	if ip, ok := s.recoders[customname]; ok && (q.Qtype == dns.TypeA || q.Qtype == dns.TypeAAAA) {
+	if ip := s.getrecoder(q.Name); ip != "" && (q.Qtype == dns.TypeA || q.Qtype == dns.TypeAAAA) {
 		logf("name is custom domian,return custom ip")
 		serv := msg.Service{Host: ip}
 		if q.Qtype == dns.TypeA {
