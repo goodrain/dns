@@ -173,6 +173,7 @@ func (d *KubeDNSServer) startSkyDNSServer() {
 		Domain:   d.domain,
 		DnsAddr:  fmt.Sprintf("%s:%d", d.dnsBindAddress, d.dnsPort),
 		Recoders: d.recoders,
+		Verbose:  os.Getenv("VERBOSE") == "true",
 	}
 	server.SetDefaults(skydnsConfig)
 	s := server.New(d.kd, skydnsConfig)
