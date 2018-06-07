@@ -51,8 +51,10 @@ type KubeDNSConfig struct {
 	ConfigPeriod time.Duration
 
 	NameServers string
+	Recoders    map[string]string
 }
 
+//NewKubeDNSConfig new kubeDNS config
 func NewKubeDNSConfig() *KubeDNSConfig {
 	return &KubeDNSConfig{
 		ClusterDomain:      "cluster.local.",
@@ -60,16 +62,13 @@ func NewKubeDNSConfig() *KubeDNSConfig {
 		DNSBindAddress:     "0.0.0.0",
 		DNSPort:            53,
 		InitialSyncTimeout: 60 * time.Second,
-
-		Federations: make(map[string]string),
-
-		ConfigMapNs: api.NamespaceSystem,
-		ConfigMap:   "", // default to using command line flags
-
-		ConfigPeriod: 10 * time.Second,
-		ConfigDir:    "",
-
-		NameServers: "",
+		Federations:        make(map[string]string),
+		ConfigMapNs:        api.NamespaceSystem,
+		ConfigMap:          "", // default to using command line flags
+		ConfigPeriod:       10 * time.Second,
+		ConfigDir:          "",
+		NameServers:        "",
+		Recoders:           make(map[string]string),
 	}
 }
 
@@ -171,6 +170,9 @@ func (s *KubeDNSConfig) AddFlags(fs *pflag.FlagSet) {
 			" domain names to which this cluster belongs. Example:"+
 			" \"myfederation1=example.com,myfederation2=example2.com,myfederation3=example.com\"."+
 			" It is an error to set both the federations and config-map or config-dir flags.")
+	fs.Var(federationsVar{s.Recoders}, "recoders",
+		"custom domin parsing Example:"+
+			" \"example.com=192.168.0.1,managehost=192.168.0.2\".")
 	fs.MarkDeprecated("federations", "use config-dir instead. Will be removed in future version")
 
 	fs.StringVar(&s.ConfigMapNs, "config-map-namespace", s.ConfigMapNs,
