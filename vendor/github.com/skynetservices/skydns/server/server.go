@@ -33,14 +33,15 @@ type server struct {
 	dnsTCPclient *dns.Client // used for forwarding queries
 	scache       *cache.Cache
 	rcache       *cache.Cache
+	recoders     map[string]string
 }
 
 // New returns a new SkyDNS server.
 func New(backend Backend, config *Config) *server {
 	return &server{
-		backend: backend,
-		config:  config,
-
+		backend:      backend,
+		config:       config,
+		recoders:     config.Recoders,
 		group:        new(sync.WaitGroup),
 		scache:       cache.New(config.SCache, 0),
 		rcache:       cache.New(config.RCache, config.RCacheTtl),
@@ -232,7 +233,15 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 
+	if ip, ok := s.recoders[name]; ok {
+		logf("name is custom domian,return custom ip")
+		serv := msg.Service{Host: ip}
+		m.Answer = append(m.Answer, serv.NewCNAME(name, dns.Fqdn(ip)))
+		return
+	}
+
 	if q.Qclass != dns.ClassCHAOS && !strings.HasSuffix(name, "."+s.config.Domain) && name != s.config.Domain {
+
 		metrics.ReportRequestCount(req, metrics.Rec)
 
 		resp := s.ServeDNSForward(w, req)

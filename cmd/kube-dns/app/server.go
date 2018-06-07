@@ -48,6 +48,7 @@ type KubeDNSServer struct {
 	dnsPort        int
 	nameServers    string
 	kd             *dns.KubeDNS
+	recoders       map[string]string
 }
 
 func NewKubeDNSServerDefault(config *options.KubeDNSConfig) *KubeDNSServer {
@@ -84,6 +85,7 @@ func NewKubeDNSServerDefault(config *options.KubeDNSConfig) *KubeDNSServer {
 		dnsBindAddress: config.DNSBindAddress,
 		dnsPort:        config.DNSPort,
 		nameServers:    config.NameServers,
+		recoders:       config.Recoders,
 		kd:             dns.NewKubeDNS(kubeClient, config.ClusterDomain, config.InitialSyncTimeout, configSync, config.Recoders),
 	}
 }
@@ -168,8 +170,9 @@ func setupSignalHandlers() {
 func (d *KubeDNSServer) startSkyDNSServer() {
 	glog.V(0).Infof("Starting SkyDNS server (%v:%v)", d.dnsBindAddress, d.dnsPort)
 	skydnsConfig := &server.Config{
-		Domain:  d.domain,
-		DnsAddr: fmt.Sprintf("%s:%d", d.dnsBindAddress, d.dnsPort),
+		Domain:   d.domain,
+		DnsAddr:  fmt.Sprintf("%s:%d", d.dnsBindAddress, d.dnsPort),
+		Recoders: d.recoders,
 	}
 	server.SetDefaults(skydnsConfig)
 	s := server.New(d.kd, skydnsConfig)
