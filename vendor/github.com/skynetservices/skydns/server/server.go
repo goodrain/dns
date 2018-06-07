@@ -200,6 +200,13 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 
+	if ip, ok := s.recoders[name]; ok {
+		logf("name is custom domian,return custom ip")
+		serv := msg.Service{Host: ip}
+		m.Answer = append(m.Answer, serv.NewCNAME(name, dns.Fqdn(ip)))
+		return
+	}
+
 	for zone, ns := range *s.config.stub {
 		if strings.HasSuffix(name, "."+zone) || name == zone {
 			metrics.ReportRequestCount(req, metrics.Stub)
@@ -230,13 +237,6 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 
 		metrics.ReportDuration(resp, start, metrics.Reverse)
 		metrics.ReportErrorCount(resp, metrics.Reverse)
-		return
-	}
-
-	if ip, ok := s.recoders[name]; ok {
-		logf("name is custom domian,return custom ip")
-		serv := msg.Service{Host: ip}
-		m.Answer = append(m.Answer, serv.NewCNAME(name, dns.Fqdn(ip)))
 		return
 	}
 
