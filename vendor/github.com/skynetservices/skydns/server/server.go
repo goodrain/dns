@@ -200,7 +200,11 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 		return
 	}
 
-	if ip, ok := s.recoders[name]; ok {
+	customname := q.Name
+	if strings.HasSuffix(customname, ".") {
+		customname = customname[:len(customname)-2]
+	}
+	if ip, ok := s.recoders[customname]; ok {
 		logf("name is custom domian,return custom ip")
 		serv := msg.Service{Host: ip}
 		m.Answer = append(m.Answer, serv.NewCNAME(name, dns.Fqdn(ip)))
