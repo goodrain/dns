@@ -208,6 +208,21 @@ func (s *server) ServeDNS(w dns.ResponseWriter, req *dns.Msg) {
 		logf("name is custom domian,return custom ip")
 		serv := msg.Service{Host: ip}
 		m.Answer = append(m.Answer, serv.NewCNAME(name, dns.Fqdn(ip)))
+		m = s.dedup(m)
+		if dnssec {
+			if s.config.PubKey != nil {
+				m.AuthenticatedData = true
+				s.Denial(m)
+				s.Sign(m, bufsize)
+			}
+		}
+		if send := s.overflowOrTruncated(w, m, int(bufsize), metrics.Auth); send {
+			return
+		}
+		s.rcache.InsertMessage(cache.Key(q, dnssec, tcp), m)
+		if err := w.WriteMsg(m); err != nil {
+			logf("failure to return reply %q", err)
+		}
 		return
 	}
 
