@@ -29,6 +29,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/util/validation"
 	fed "k8s.io/dns/pkg/dns/federation"
+	recoder "k8s.io/dns/pkg/dns/recoder"
 	"k8s.io/kubernetes/pkg/api"
 )
 
@@ -143,6 +144,26 @@ func (fv federationsVar) Type() string {
 	return "[]string"
 }
 
+type recodersVar struct {
+	nameDomainMap map[string]string
+}
+
+func (fv recodersVar) Set(keyVal string) error {
+	return recoder.ParseRecodersFlag(keyVal, fv.nameDomainMap)
+}
+
+func (fv recodersVar) String() string {
+	var splits []string
+	for name, domain := range fv.nameDomainMap {
+		splits = append(splits, fmt.Sprintf("%s=%s", name, domain))
+	}
+	return strings.Join(splits, ",")
+}
+
+func (fv recodersVar) Type() string {
+	return "[]string"
+}
+
 func (s *KubeDNSConfig) AddFlags(fs *pflag.FlagSet) {
 	fs.Var(clusterDomainVar{&s.ClusterDomain}, "domain",
 		"domain under which to create names")
@@ -170,7 +191,7 @@ func (s *KubeDNSConfig) AddFlags(fs *pflag.FlagSet) {
 			" domain names to which this cluster belongs. Example:"+
 			" \"myfederation1=example.com,myfederation2=example2.com,myfederation3=example.com\"."+
 			" It is an error to set both the federations and config-map or config-dir flags.")
-	fs.Var(federationsVar{s.Recoders}, "recoders",
+	fs.Var(recodersVar{s.Recoders}, "recoders",
 		"custom domin parsing Example:"+
 			" \"example.com=192.168.0.1,managehost=192.168.0.2\".")
 	fs.MarkDeprecated("federations", "use config-dir instead. Will be removed in future version")
