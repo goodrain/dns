@@ -235,6 +235,7 @@ build-image-dns: build
 help:
 	@echo "make targets"
 	@echo
+	@echo "  build-image-dns"
 	@echo "  all, build    build all binaries"
 	@echo "  containers    build the containers"
 	@echo "  push          push containers to the registry"

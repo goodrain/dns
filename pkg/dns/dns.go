@@ -311,7 +311,7 @@ func (kd *KubeDNS) setNodesStore() {
 	_, kd.nodeController = kcache.NewInformer(
 		kcache.NewListWatchFromClient(
 			kd.kubeClient.Core().RESTClient(),
-			"node",
+			"nodes",
 			v1.NamespaceAll,
 			fields.Everything()),
 		&v1.Node{},
