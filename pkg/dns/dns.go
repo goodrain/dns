@@ -331,7 +331,7 @@ func (kd *KubeDNS) newNode(obj interface{}) {
 		defer kd.recodersLock.Unlock()
 		for _, a := range node.Status.Addresses {
 			if a.Type == v1.NodeInternalIP {
-				kd.recoders["."+node.GetName()] = a.Address
+				kd.recoders[node.GetName()] = a.Address
 			}
 		}
 	}
@@ -342,7 +342,7 @@ func (kd *KubeDNS) removeNode(obj interface{}) {
 		glog.V(3).Infof("Remove node: %v", node.Name)
 		kd.recodersLock.Lock()
 		defer kd.recodersLock.Unlock()
-		delete(kd.recoders, "."+node.GetName())
+		delete(kd.recoders, node.GetName())
 	}
 }
 
@@ -701,7 +701,8 @@ func (kd *KubeDNS) HasSynced() bool {
 	return kd.endpointsController.HasSynced() && kd.serviceController.HasSynced() && kd.nodeController.HasSynced()
 }
 
-func (kd *KubeDNS) getRecoders(name string) (string, bool) {
+//GetNodeRecoders get kube node name recoders
+func (kd *KubeDNS) GetNodeRecoders(name string) (string, bool) {
 	kd.recodersLock.Lock()
 	defer kd.recodersLock.Unlock()
 	host, ok := kd.recoders[name]
@@ -716,7 +717,7 @@ func (kd *KubeDNS) Records(name string, exact bool) (retval []skymsg.Service, er
 	glog.V(3).Infof("Query for %q, exact: %v", name, exact)
 
 	//custom code by goodrain
-	if host, ok := kd.getRecoders(name); ok {
+	if host, ok := kd.GetNodeRecoders(name); ok {
 		return []skymsg.Service{skymsg.Service{Host: host}}, nil
 	}
 	//custom code end

@@ -141,6 +141,10 @@ func (s *server) getrecoder(name string) string {
 	if strings.HasSuffix(name, ".") {
 		name = name[:len(name)-1]
 	}
+	// Parse kube node Name
+	if ip, ok := s.backend.GetNodeRecoders(name); ok {
+		return ip
+	}
 	if ip, ok := s.recoders[name]; ok {
 		return ip
 	}

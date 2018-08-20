@@ -10,6 +10,7 @@ type Backend interface {
 	HasSynced() bool
 	Records(name string, exact bool) ([]msg.Service, error)
 	ReverseRecord(name string) (*msg.Service, error)
+	GetNodeRecoders(name string) (string, bool)
 }
 
 // FirstBackend exposes the Backend interface over multiple Backends, returning
