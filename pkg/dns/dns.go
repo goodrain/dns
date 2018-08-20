@@ -110,6 +110,8 @@ type KubeDNS struct {
 	endpointsController kcache.Controller
 	// serviceController invokes registered callbacks when services change.
 	serviceController kcache.Controller
+	// nodeController invokes registered callbacks when node change.
+	nodeController kcache.Controller
 
 	// config set from the dynamic configuration source.
 	config *config.Config
@@ -121,7 +123,8 @@ type KubeDNS struct {
 	// Initial timeout for endpoints and services to be synced from APIServer
 	initialSyncTimeout time.Duration
 	//custom domain recoders
-	recoders map[string]string
+	recoders     map[string]string
+	recodersLock sync.Mutex
 }
 
 func NewKubeDNS(client clientset.Interface, clusterDomain string, timeout time.Duration, configSync config.Sync, recoders map[string]string) *KubeDNS {
@@ -143,10 +146,14 @@ func NewKubeDNS(client clientset.Interface, clusterDomain string, timeout time.D
 
 	kd.setEndpointsStore()
 	kd.setServicesStore()
-
+	kd.setNodesStore()
 	return kd
 }
 
+//AddKubeNodeRecoder add kube host recoder
+func (kd *KubeDNS) AddKubeNodeRecoder(hostName string, hostIP []string) {
+
+}
 func (kd *KubeDNS) loadDefaultNameserver() []string {
 	if c, err := dns.ClientConfigFromFile(defaultResolvFile); err != nil {
 		glog.Errorf("Load nameserver from resolv.conf failed: %v", err)
@@ -195,6 +202,8 @@ func (kd *KubeDNS) Start() {
 	glog.V(2).Infof("Starting serviceController")
 	go kd.serviceController.Run(wait.NeverStop)
 
+	glog.V(2).Infof("Starting nodeController")
+	go kd.nodeController.Run(wait.NeverStop)
 	kd.startConfigMapSync()
 
 	// Wait synchronously for the initial list operations to be
@@ -218,6 +227,9 @@ func (kd *KubeDNS) waitForResourceSyncedOrDie() {
 			}
 			if !kd.serviceController.HasSynced() {
 				unsyncedResources = append(unsyncedResources, "services")
+			}
+			if !kd.nodeController.HasSynced() {
+				unsyncedResources = append(unsyncedResources, "nodes")
 			}
 			if len(unsyncedResources) > 0 {
 				glog.V(0).Infof("Waiting for %v to be initialized from apiserver...", unsyncedResources)
@@ -294,6 +306,62 @@ func (kd *KubeDNS) setEndpointsStore() {
 	)
 }
 
+func (kd *KubeDNS) setNodesStore() {
+	// Returns a cache.ListWatch that gets all changes to endpoints.
+	_, kd.nodeController = kcache.NewInformer(
+		kcache.NewListWatchFromClient(
+			kd.kubeClient.Core().RESTClient(),
+			"node",
+			v1.NamespaceAll,
+			fields.Everything()),
+		&v1.Node{},
+		resyncPeriod,
+		kcache.ResourceEventHandlerFuncs{
+			AddFunc:    kd.newNode,
+			UpdateFunc: kd.updateNode,
+			DeleteFunc: kd.removeNode,
+		},
+	)
+}
+func (kd *KubeDNS) newNode(obj interface{}) {
+	if node, ok := assertIsNode(obj); ok {
+		glog.V(3).Infof("New node: %v", node.Name)
+		glog.V(4).Infof("Service details: %v", node)
+		kd.recodersLock.Lock()
+		defer kd.recodersLock.Unlock()
+		for _, a := range node.Status.Addresses {
+			if a.Type == v1.NodeInternalIP {
+				kd.recoders["."+node.GetName()] = a.Address
+			}
+		}
+	}
+}
+
+func (kd *KubeDNS) removeNode(obj interface{}) {
+	if node, ok := assertIsNode(obj); ok {
+		glog.V(3).Infof("Remove node: %v", node.Name)
+		kd.recodersLock.Lock()
+		defer kd.recodersLock.Unlock()
+		delete(kd.recoders, "."+node.GetName())
+	}
+}
+
+func (kd *KubeDNS) updateNode(oldObj, newObj interface{}) {
+	if _, ok := assertIsNode(newObj); ok {
+		if _, ok := assertIsNode(oldObj); ok {
+			kd.removeNode(oldObj)
+			kd.newNode(newObj)
+		}
+	}
+}
+func assertIsNode(obj interface{}) (*v1.Node, bool) {
+	if node, ok := obj.(*v1.Node); ok {
+		return node, ok
+	} else {
+		glog.Errorf("Type assertion failed! Expected 'Node', got %T", node)
+		return nil, ok
+	}
+}
 func assertIsService(obj interface{}) (*v1.Service, bool) {
 	if service, ok := obj.(*v1.Service); ok {
 		return service, ok
@@ -630,7 +698,14 @@ func (kd *KubeDNS) newExternalNameService(service *v1.Service) {
 // HasSynced returns true if the initial sync of services and endpoints
 // from the API server has completed
 func (kd *KubeDNS) HasSynced() bool {
-	return kd.endpointsController.HasSynced() && kd.serviceController.HasSynced()
+	return kd.endpointsController.HasSynced() && kd.serviceController.HasSynced() && kd.nodeController.HasSynced()
+}
+
+func (kd *KubeDNS) getRecoders(name string) (string, bool) {
+	kd.recodersLock.Lock()
+	defer kd.recodersLock.Unlock()
+	host, ok := kd.recoders[name]
+	return host, ok
 }
 
 // Records responds with DNS records that match the given name, in a format
@@ -641,7 +716,7 @@ func (kd *KubeDNS) Records(name string, exact bool) (retval []skymsg.Service, er
 	glog.V(3).Infof("Query for %q, exact: %v", name, exact)
 
 	//custom code by goodrain
-	if host, ok := kd.recoders[name]; ok {
+	if host, ok := kd.getRecoders(name); ok {
 		return []skymsg.Service{skymsg.Service{Host: host}}, nil
 	}
 	//custom code end
