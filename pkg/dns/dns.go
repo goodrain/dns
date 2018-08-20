@@ -326,7 +326,7 @@ func (kd *KubeDNS) setNodesStore() {
 func (kd *KubeDNS) newNode(obj interface{}) {
 	if node, ok := assertIsNode(obj); ok {
 		glog.V(3).Infof("New node: %v", node.Name)
-		glog.V(4).Infof("Service details: %v", node)
+		glog.V(4).Infof("Node details: %v", node)
 		kd.recodersLock.Lock()
 		defer kd.recodersLock.Unlock()
 		for _, a := range node.Status.Addresses {

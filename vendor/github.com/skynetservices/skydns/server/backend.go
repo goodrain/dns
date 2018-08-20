@@ -21,6 +21,9 @@ type FirstBackend []Backend
 // FirstBackend implements Backend
 var _ Backend = FirstBackend{}
 
+func (g FirstBackend) GetNodeRecoders(name string) (string, bool) {
+	return "", false
+}
 func (g FirstBackend) Records(name string, exact bool) (records []msg.Service, err error) {
 	var lastError error
 	for _, backend := range g {
