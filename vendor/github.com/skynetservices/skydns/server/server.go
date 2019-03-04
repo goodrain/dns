@@ -635,7 +635,9 @@ func (s *server) SRVRecords(q dns.Question, name string, bufsize uint16, dnssec 
 				extra = append(extra, addr...)
 			}
 		case ip.To4() != nil:
-			serv.Host = msg.Domain(serv.Key)
+			if serv.Key != "" {
+				serv.Host = msg.Domain(serv.Key)
+			}
 			srv := serv.NewSRV(q.Name, weight)
 
 			records = append(records, srv)
